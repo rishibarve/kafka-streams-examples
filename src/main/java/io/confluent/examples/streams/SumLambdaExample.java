@@ -15,6 +15,8 @@
  */
 package io.confluent.examples.streams;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.confluent.examples.streams.pojo.TestPojo;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
@@ -22,7 +24,9 @@ import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
+import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.Properties;
 
 /**
@@ -39,10 +43,8 @@ import java.util.Properties;
  * 2) Create the input and output topics used by this example.
  * <pre>
  * {@code
- * $ bin/kafka-topics --create --topic numbers-topic \
- *                    --zookeeper localhost:2181 --partitions 1 --replication-factor 1
- * $ bin/kafka-topics --create --topic sum-of-odd-numbers-topic \
- *                    --zookeeper localhost:2181 --partitions 1 --replication-factor 1
+ * $ bin/kafka-topics --create --topic numbers-topic --zookeeper localhost:2181 --partitions 1 --replication-factor 1
+ * $ bin/kafka-topics --create --topic sum-of-odd-numbers-topic --zookeeper localhost:2181 --partitions 1 --replication-factor 1
  * }</pre>
  * Note: The above commands are for the Confluent Platform. For Apache Kafka it should be {@code `bin/kafka-topics.sh ...}.
  * <p>
@@ -96,7 +98,7 @@ public class SumLambdaExample {
     streamsConfiguration.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
     // Specify default (de)serializers for record keys and for record values.
     streamsConfiguration.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.Integer().getClass().getName());
-    streamsConfiguration.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.Integer().getClass().getName());
+    streamsConfiguration.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
     streamsConfiguration.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
     streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, "/tmp/kafka-streams");
     // Records should be flushed every 10 seconds. This is less than the default
@@ -108,10 +110,15 @@ public class SumLambdaExample {
     // We don't really care about the keys of the input records;  for simplicity, we assume them
     // to be Integers, too, because we will re-key the stream later on, and the new key will be
     // of type Integer.
-    final KStream<Integer, Integer> input = builder.stream(NUMBERS_TOPIC);
-    final KTable<Integer, Integer> sumOfOddNumbers = input
+    final KStream<Integer, String> input = builder.stream(NUMBERS_TOPIC);
+    final KTable<Integer, String> sumOfOddNumbers = input
       // We are only interested in odd numbers.
-      .filter((k, v) -> v % 2 != 0)
+
+
+//      .filter((k, v) -> v % 2 != 0)
+
+
+
       // We want to compute the total sum across ALL numbers, so we must re-key all records to the
       // same key.  This re-keying is required because in Kafka Streams a data record is always a
       // key-value pair, and KStream aggregations such as `reduce` operate on a per-key basis.
@@ -121,7 +128,21 @@ public class SumLambdaExample {
       // no need to specify explicit serdes because the resulting key and value types match our default serde settings
       .groupByKey()
       // Add the numbers to compute the sum.
-      .reduce((v1, v2) -> v1 + v2);
+      .reduce((v1, v2) -> {
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+          TestPojo v1Pojo = objectMapper.readValue(v1, TestPojo.class);
+          TestPojo v2Pojo = objectMapper.readValue(v2, TestPojo.class);
+          TestPojo outputPojo = new TestPojo();
+          outputPojo.setBrand("Morcaaa");
+          outputPojo.setDoors(v1Pojo.getDoors() + v2Pojo.getDoors());
+          return objectMapper.writeValueAsString(outputPojo);
+        } catch (IOException e) {
+          e.printStackTrace();
+        }
+        return null;
+      });
+//      .reduce((v1, v2) -> v1 + v2);
     sumOfOddNumbers.toStream().to(SUM_OF_ODD_NUMBERS_TOPIC);
 
     final KafkaStreams streams = new KafkaStreams(builder.build(), streamsConfiguration);

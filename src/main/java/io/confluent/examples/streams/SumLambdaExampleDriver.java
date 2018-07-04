@@ -24,6 +24,8 @@ import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.IntegerDeserializer;
 import org.apache.kafka.common.serialization.IntegerSerializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
 
 import java.util.Collections;
 import java.util.Properties;
@@ -60,16 +62,16 @@ public class SumLambdaExampleDriver {
     final Properties properties = new Properties();
     properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
     properties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, IntegerDeserializer.class);
-    properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, IntegerDeserializer.class);
+    properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
     properties.put(ConsumerConfig.GROUP_ID_CONFIG, "sum-lambda-example-consumer");
     properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-    final KafkaConsumer<Integer, Integer> consumer = new KafkaConsumer<>(properties);
+    final KafkaConsumer<Integer, String> consumer = new KafkaConsumer<>(properties);
     consumer.subscribe(Collections.singleton(SumLambdaExample.SUM_OF_ODD_NUMBERS_TOPIC));
     while (true) {
-      final ConsumerRecords<Integer, Integer> records =
+      final ConsumerRecords<Integer, String> records =
               consumer.poll(Long.MAX_VALUE);
 
-      for (final ConsumerRecord<Integer, Integer> record : records) {
+      for (final ConsumerRecord<Integer, String> record : records) {
         System.out.println("Current sum of odd numbers is:" + record.value());
       }
     }
@@ -79,12 +81,19 @@ public class SumLambdaExampleDriver {
     final Properties props = new Properties();
     props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
     props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, IntegerSerializer.class);
-    props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, IntegerSerializer.class);
+    props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
 
-    final KafkaProducer<Integer, Integer> producer = new KafkaProducer<>(props);
+    final KafkaProducer<Integer, String> producer = new KafkaProducer<>(props);
 
+    String v =
+            "{ \"brand\" : \"Mercedes\", \"doors\" : 5 }";
+
+//    ProducerRecord<Integer, String> producerRecord1 = new ProducerRecord<>(SumLambdaExample.NUMBERS_TOPIC, 1, v);
+//    ProducerRecord<Integer, String> producerRecord2 = new ProducerRecord<>(SumLambdaExample.NUMBERS_TOPIC, 2, v);
+//    producer.send(producerRecord1);
+//    producer.send(producerRecord2);
     IntStream.range(0, 100)
-            .mapToObj(val -> new ProducerRecord<>(SumLambdaExample.NUMBERS_TOPIC, val, val))
+            .mapToObj(val -> new ProducerRecord<>(SumLambdaExample.NUMBERS_TOPIC, val, v))
             .forEach(producer::send);
 
     producer.flush();
